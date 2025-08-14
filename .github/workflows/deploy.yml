@@ -64,4 +64,4 @@ jobs:
         # It now uses the cleaned task definition file.
         task-definition: ${{ steps.clean-task-def.outputs.task-definition-path }}
         service: my-web-app-service
-        cluster: my-web-app-cluster
+        cluster: my-web-app-cluster2
