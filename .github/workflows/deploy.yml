@@ -18,7 +18,7 @@ jobs:
       with:
         aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        aws-region: us-east-1 # Change this to your AWS region
+        aws-region: us-east-1
 
     - name: Login to Amazon ECR
       id: login-ecr
@@ -35,27 +35,33 @@ jobs:
         docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
         echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
 
-    # ======================================================================
-    # ## THIS STEP IS NEW ##
-    # It downloads the latest task definition from AWS and saves it as a file.
     - name: Download task definition
       run: |
         aws ecs describe-task-definition --task-definition my-web-app-task --query taskDefinition > task-definition.json
-    # ======================================================================
 
     - name: Fill in the new image ID in the Amazon ECS task definition
       id: task-def
       uses: aws-actions/amazon-ecs-render-task-definition@v1
       with:
-        # ## THIS LINE IS CHANGED ##
-        # Now it points to the file we just downloaded.
         task-definition: task-definition.json
         container-name: my-web-app-container
         image: ${{ steps.build-image.outputs.image }}
 
+    # =========================================================================================
+    # ## THIS IS THE NEW STEP THAT FIXES THE ERROR ##
+    # It uses jq to create a new task definition file without the problematic key.
+    - name: Clean task definition for deployment
+      id: clean-task-def
+      run: |
+        jq 'del(.enableFaultInjection)' ${{ steps.task-def.outputs.task-definition }} > clean-task-definition.json
+        echo "task-definition-path=clean-task-definition.json" >> $GITHUB_OUTPUT
+    # =========================================================================================
+
     - name: Deploy Amazon ECS task definition
       uses: aws-actions/amazon-ecs-deploy-task-definition@v1
       with:
-        task-definition: ${{ steps.task-def.outputs.task-definition }}
+        # ## THIS LINE IS CHANGED ##
+        # It now uses the cleaned task definition file.
+        task-definition: ${{ steps.clean-task-def.outputs.task-definition-path }}
         service: my-web-app-service
         cluster: my-web-app-cluster
